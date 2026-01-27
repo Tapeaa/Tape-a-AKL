@@ -1,0 +1,82 @@
+entrypoint = "README.md"
+modules = ["nodejs-22"]
+
+[nix]
+channel = "stable-24_05"
+
+[[ports]]
+localPort = 5000
+externalPort = 80
+
+[[ports]]
+localPort = 8081
+externalPort = 80
+
+[[ports]]
+localPort = 8082
+externalPort = 3000
+
+[workflows]
+runButton = "Project"
+
+[[workflows.workflow]]
+name = "Dev Server"
+mode = "sequential"
+author = "agent"
+
+[workflows.workflow.metadata]
+outputType = "webview"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "npx tsx server/index.ts & sleep 3 && npx expo start --tunnel --port 8081"
+waitForPort = 5000
+
+[[workflows.workflow]]
+name = "EAS Init"
+mode = "sequential"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "npx eas init"
+
+[[workflows.workflow]]
+name = "EAS Update"
+mode = "sequential"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "npx eas update --auto"
+
+[[workflows.workflow]]
+name = "EAS Publish Preview iOS"
+mode = "sequential"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "npx eas build --platform ios --profile preview"
+
+[[workflows.workflow]]
+name = "EAS Publish Preview Android"
+mode = "sequential"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "npx eas build --platform android --profile preview"
+
+[[workflows.workflow]]
+name = "Project"
+mode = "parallel"
+author = "agent"
+
+[[workflows.workflow.tasks]]
+task = "workflow.run"
+args = "Dev Server"
+
+[agent]
+expertMode = true
+
+[userenv]
+
+[userenv.shared]
+EXPO_PUBLIC_API_URL = "https://3c64cb8c-dbdc-4866-98c1-6288dcfab16d-00-148aha3abcr97.worf.replit.dev/api"

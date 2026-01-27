@@ -1,0 +1,44 @@
+{
+  "cli": {
+    "version": ">= 10.0.0"
+  },
+  "build": {
+    "development": {
+      "developmentClient": true,
+      "distribution": "internal",
+      "node": "20.18.0",
+      "env": {
+        "NPM_CONFIG_LEGACY_PEER_DEPS": "true"
+      },
+      "ios": {
+        "simulator": false
+      }
+    },
+    "preview": {
+      "distribution": "internal"
+    },
+    "production": {
+      "distribution": "store",
+      "autoIncrement": true,
+      "env": {
+        "NODE_ENV": "production"
+      },
+      "android": {
+        "buildType": "app-bundle"
+      }
+    }
+  },
+  "submit": {
+    "production": {
+      "ios": {
+        "appleId": "tapea.app@gmail.com",
+        "ascAppId": "6758334538",
+        "appleTeamId": "UG53K2J3SU"
+      },
+      "android": {
+        "serviceAccountKeyPath": "./google-service-account.json",
+        "track": "production"
+      }
+    }
+  }
+}
