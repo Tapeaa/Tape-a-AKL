@@ -645,6 +645,27 @@ export function onRideCancelled(
   return () => s.off('ride:cancelled', callback);
 }
 
+// ═══════════════════════════════════════════════════════════════════════════
+// FRAIS DE SERVICE OFFERTS: Notification quand un salarié TAPEA accepte la course
+// ═══════════════════════════════════════════════════════════════════════════
+export function onFraisServiceOfferts(
+  callback: (data: {
+    orderId: string;
+    message: string;
+    ancienPrix: number;
+    nouveauPrix: number;
+    economie: number;
+  }) => void
+): () => void {
+  const s = getSocket();
+  const handler = (data: any) => {
+    console.log('[Socket] ✅ Frais de service offerts reçus:', data);
+    callback(data);
+  };
+  s.on('frais:service:offerts', handler);
+  return () => s.off('frais:service:offerts', handler);
+}
+
 export function emitDriverLocation(
   orderId: string,
   sessionId: string,

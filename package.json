@@ -29,6 +29,7 @@
     "@tanstack/react-query": "^5.90.15",
     "dotenv": "^17.2.3",
     "expo": "~54.0.32",
+    "expo-av": "~16.0.8",
     "expo-blur": "~15.0.8",
     "expo-constants": "~18.0.13",
     "expo-dev-client": "~6.0.20",

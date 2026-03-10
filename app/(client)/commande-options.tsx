@@ -20,7 +20,7 @@ import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { RIDE_OPTIONS, type Supplement, type RouteInfo, type PaymentMethod } from '@/lib/types';
 import { useQuery } from '@tanstack/react-query';
-import { apiFetch } from '@/lib/api';
+import { apiFetch, getFraisServiceConfig } from '@/lib/api';
 import { useAuth } from '@/lib/AuthContext';
 import Constants from 'expo-constants';
 import { useTarifs, isNightRate, type TarifsConfig } from '@/lib/tarifs';
@@ -134,12 +134,14 @@ const DEFAULT_SUPPLEMENTS = [
 ];
 
 // Fonction pour calculer le prix réel selon les tarifs du back-office
+// Inclut les frais de service (configurable) pour les prestataires
 const calculateRealPrice = (
   distanceKm: number,
   passengersCount: number,
   supplements: Array<{ id: string; quantity: number; price: number }>,
   scheduledDate: Date | undefined,
-  tarifsConfig: TarifsConfig | null
+  tarifsConfig: TarifsConfig | null,
+  fraisServicePercent: number = 15
 ): {
   priseEnCharge: number;
   tarifKm: number;
@@ -148,6 +150,9 @@ const calculateRealPrice = (
   majorationPassagers: number;
   hasMajorationPassagers: boolean;
   supplementsTotal: number;
+  subtotal: number; // Prix avant frais de service
+  fraisService: number; // Frais de service (% configurable)
+  fraisServicePercent: number; // % pour affichage
   total: number;
 } => {
   // Utiliser les tarifs du back-office ou les valeurs par défaut
@@ -172,8 +177,15 @@ const calculateRealPrice = (
   // Total suppléments sélectionnés
   const supplementsTotal = supplements.reduce((sum, s) => sum + (s.price * s.quantity), 0);
   
-  // Total
-  const total = priseEnCharge + prixKm + majorationPassagers + supplementsTotal;
+  // Sous-total (prix de base sans frais de service)
+  const subtotal = priseEnCharge + prixKm + majorationPassagers + supplementsTotal;
+  
+  // Frais de service TAPEA (% configurable du sous-total)
+  // Ces frais peuvent être offerts si un salarié TAPEA accepte la course
+  const fraisService = Math.round(subtotal * fraisServicePercent / 100);
+  
+  // Total avec frais de service
+  const total = subtotal + fraisService;
   
   return {
     priseEnCharge,
@@ -183,6 +195,9 @@ const calculateRealPrice = (
     majorationPassagers,
     hasMajorationPassagers,
     supplementsTotal,
+    subtotal,
+    fraisService,
+    fraisServicePercent,
     total,
   };
 };
@@ -218,6 +233,9 @@ export default function CommandeOptionsScreen() {
   
   // Hook pour récupérer les tarifs dynamiques depuis le back-office
   const { tarifs, loading: tarifsLoading } = useTarifs();
+  
+  // State pour les frais de service configurables
+  const [fraisServicePercent, setFraisServicePercent] = useState(15);
   
   // Utiliser les suppléments du back-office ou les valeurs par défaut
   const SUPPLEMENTS_OFFICIELS = (tarifs?.supplements && tarifs.supplements.length > 0)
@@ -266,6 +284,14 @@ export default function CommandeOptionsScreen() {
   const slideAnim = useRef(new Animated.Value(50)).current;
   const priceScaleAnim = useRef(new Animated.Value(0.95)).current;
   const priceOpacityAnim = useRef(new Animated.Value(0)).current;
+
+  // Récupérer la config des frais de service au chargement
+  useEffect(() => {
+    getFraisServiceConfig().then(config => {
+      setFraisServicePercent(config.fraisServicePrestataire);
+      console.log('[CommandeOptions] Frais de service chargés:', config.fraisServicePrestataire + '%');
+    });
+  }, []);
 
   useEffect(() => {
     Animated.parallel([
@@ -497,18 +523,20 @@ export default function CommandeOptionsScreen() {
     // Utiliser distance > 0 pour s'assurer qu'on a une vraie distance calculée
     const effectiveDistance = distance > 0 ? distance : 0;
     const realPriceData = isTourType 
-      ? { priseEnCharge: TOUR_FIXED_PRICE, tarifKm: 0, prixKm: 0, isNight: false, majorationPassagers: 0, supplementsTotal: 0, total: TOUR_FIXED_PRICE }
+      ? { priseEnCharge: TOUR_FIXED_PRICE, tarifKm: 0, prixKm: 0, isNight: false, majorationPassagers: 0, supplementsTotal: 0, subtotal: TOUR_FIXED_PRICE, fraisService: 0, fraisServicePercent: 0, total: TOUR_FIXED_PRICE, hasMajorationPassagers: false }
       : calculateRealPrice(
           effectiveDistance,
           passengers,
           supplements,
           isAdvanceBooking ? scheduledTime : undefined,
-          tarifs  // Passer les tarifs dynamiques
+          tarifs,  // Passer les tarifs dynamiques
+          fraisServicePercent  // Passer le % de frais de service
         );
     const heightSurcharge = (heightSurchargeApplied && !isTourType) ? HEIGHT_SURCHARGE_AMOUNT : 0;
     const displayTotal = realPriceData.total + heightSurcharge;
     const totalPrice = isTourType ? TOUR_FIXED_PRICE : realPriceData.total;
-  const driverEarnings = isTourType ? TOUR_FIXED_PRICE : Math.round(totalPrice * 0.85); // Tour: 100%, autres: 85%
+    // Pour les tours, le chauffeur garde tout. Pour les autres, driverEarnings = subtotal (sans frais service)
+  const driverEarnings = isTourType ? TOUR_FIXED_PRICE : realPriceData.subtotal;
   const formatPrice = (price: number) => `${price.toLocaleString('fr-FR')} F`;
 
   const handleSupplementToggle = (supplementId: string) => {
@@ -597,20 +625,22 @@ export default function CommandeOptionsScreen() {
     }
 
     // Recalculer le prix une dernière fois juste avant la navigation pour être sûr d'avoir la valeur exacte
-    // Pour le tour de l'île, utiliser le prix fixe
+    // Pour le tour de l'île, utiliser le prix fixe (pas de frais de service)
     const finalPriceData = isTourType
-      ? { priseEnCharge: TOUR_FIXED_PRICE, tarifKm: 0, prixKm: 0, isNight: false, majorationPassagers: 0, supplementsTotal: 0, total: TOUR_FIXED_PRICE, hasMajorationPassagers: false }
+      ? { priseEnCharge: TOUR_FIXED_PRICE, tarifKm: 0, prixKm: 0, isNight: false, majorationPassagers: 0, supplementsTotal: 0, subtotal: TOUR_FIXED_PRICE, fraisService: 0, fraisServicePercent: 0, total: TOUR_FIXED_PRICE, hasMajorationPassagers: false }
       : calculateRealPrice(
           distance, // Utiliser la distance réelle calculée
           passengers,
           supplements,
           isAdvanceBooking ? scheduledTime : undefined,
-          tarifs
+          tarifs,
+          fraisServicePercent  // Passer le % de frais de service
         );
     
     // Prix final pour le tour ou calculé
     const finalTotalPrice = isTourType ? TOUR_FIXED_PRICE : finalPriceData.total;
-    const finalDriverEarnings = isTourType ? TOUR_FIXED_PRICE : Math.round(finalTotalPrice * 0.85);
+    // Pour les tours, le chauffeur garde tout. Pour les autres, driverEarnings = subtotal (sans frais service)
+    const finalDriverEarnings = isTourType ? TOUR_FIXED_PRICE : finalPriceData.subtotal;
     
     // Vérifier que le prix est valide
     if (finalTotalPrice <= 0 || isNaN(finalTotalPrice)) {
@@ -628,6 +658,8 @@ export default function CommandeOptionsScreen() {
       majorationPassagers: finalPriceData.majorationPassagers,
       passagersSupplementaires: finalPriceData.hasMajorationPassagers ? finalPriceData.majorationPassagers : undefined,
       supplementsTotal: finalPriceData.supplementsTotal,
+      subtotal: finalPriceData.subtotal, // Prix sans frais de service
+      fraisService: finalPriceData.fraisService, // 15% frais de service
       total: finalPriceData.total,
     };
 
@@ -1015,6 +1047,17 @@ export default function CommandeOptionsScreen() {
                   <View style={styles.priceRow}>
                     <Text style={styles.priceLabel}>Majoration hauteur (≥250 m)</Text>
                     <Text style={styles.priceValue}>{formatPrice(HEIGHT_SURCHARGE_AMOUNT)}</Text>
+                  </View>
+                )}
+
+                {/* Frais de service TAPEA (% configurable) - Pas pour les tours */}
+                {!isTourType && realPriceData.fraisService > 0 && (
+                  <View style={styles.priceRowService}>
+                    <View style={styles.priceRowServiceLeft}>
+                      <Text style={styles.priceLabelService}>Frais de service ({realPriceData.fraisServicePercent}%)</Text>
+                      <Text style={styles.priceServiceHint}>Peut être offert selon le chauffeur</Text>
+                    </View>
+                    <Text style={styles.priceValueService}>{formatPrice(realPriceData.fraisService)}</Text>
                   </View>
                 )}
               </View>
@@ -1779,15 +1822,44 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     minHeight: 24,
   },
+  priceRowService: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    marginTop: 8,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(255,255,255,0.1)',
+  },
+  priceRowServiceLeft: {
+    flex: 1,
+  },
   priceLabel: {
     fontSize: 14,
     color: '#9CA3AF',
     flex: 1,
   },
+  priceLabelService: {
+    fontSize: 14,
+    color: '#F5C400',
+    fontWeight: '600',
+  },
+  priceServiceHint: {
+    fontSize: 11,
+    color: '#6B7280',
+    marginTop: 2,
+  },
   priceValue: {
     fontSize: 14,
     fontWeight: '600',
     color: '#FFFFFF',
+    textAlign: 'right',
+    minWidth: 100,
+  },
+  priceValueService: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#F5C400',
     textAlign: 'right',
     minWidth: 100,
   },

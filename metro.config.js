@@ -19,6 +19,7 @@ config.resolver.assetExts = [
   'gif',
   'webp',
   'svg',
+  'mp4',
 ];
 
 // Exclure react-native-maps sur le web

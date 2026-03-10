@@ -1,6 +1,7 @@
 {
   "cli": {
-    "version": ">= 10.0.0"
+    "version": ">= 10.0.0",
+    "appVersionSource": "remote"
   },
   "build": {
     "development": {
@@ -20,8 +21,9 @@
     "production": {
       "distribution": "store",
       "autoIncrement": true,
+      "node": "20.18.0",
       "env": {
-        "NODE_ENV": "production"
+        "NPM_CONFIG_LEGACY_PEER_DEPS": "true"
       },
       "android": {
         "buildType": "app-bundle"

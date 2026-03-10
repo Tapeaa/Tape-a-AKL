@@ -8,8 +8,8 @@ import { Card } from '@/components/ui/Card';
 export default function SupportScreen() {
   const router = useRouter();
 
-  const handleCall = () => {
-    Linking.openURL('tel:+68987759897');
+  const handleWhatsApp = () => {
+    Linking.openURL('https://wa.me/68987759897');
   };
 
   const handleEmail = () => {
@@ -42,12 +42,12 @@ export default function SupportScreen() {
         </Text>
 
         <View style={styles.contactOptions}>
-          <TouchableOpacity onPress={handleCall}>
+          <TouchableOpacity onPress={handleWhatsApp}>
             <Card style={styles.contactCard}>
-              <View style={styles.contactIcon}>
-                <Ionicons name="call" size={28} color="#F5C400" />
+              <View style={[styles.contactIcon, { backgroundColor: '#DCF8C6' }]}>
+                <Ionicons name="logo-whatsapp" size={28} color="#25D366" />
               </View>
-              <Text variant="label">Nous appeler</Text>
+              <Text variant="label">WhatsApp</Text>
               <Text variant="caption">+689 87 75 98 97</Text>
             </Card>
           </TouchableOpacity>

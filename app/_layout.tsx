@@ -5,7 +5,8 @@ import { QueryClientProvider } from '@tanstack/react-query';
 import { useFonts } from 'expo-font';
 import * as SplashScreen from 'expo-splash-screen';
 import 'react-native-reanimated';
-import { View, StyleSheet, ActivityIndicator, Image, Animated, Platform } from 'react-native';
+import { View, StyleSheet, ActivityIndicator, Image, Animated, Platform, Dimensions } from 'react-native';
+import { Video, ResizeMode } from 'expo-av';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import Constants from 'expo-constants';
 import { Asset } from 'expo-asset';
@@ -109,6 +110,20 @@ const StripeProviderWrapper: React.FC<{ children: React.ReactNode }> = ({ childr
   return <View style={{ flex: 1 }}>{children}</View>;
 };
 
+// Précharger la vidéo splash et retourner l'URI locale (pour affichage fiable)
+async function preloadSplashVideo(): Promise<string | null> {
+  try {
+    const asset = Asset.fromModule(SPLASH_VIDEO);
+    await asset.downloadAsync();
+    const uri = asset.localUri ?? asset.uri;
+    console.log('[Preload] ✅ Vidéo splash chargée:', uri ? 'OK' : 'pas d\'URI');
+    return uri;
+  } catch (e) {
+    console.warn('[Preload] Erreur vidéo splash:', e);
+    return null;
+  }
+}
+
 // Fonction pour précharger toutes les images avec progression
 async function preloadAllImages(onProgress: (loaded: number, total: number) => void): Promise<void> {
   const total = allAppImages.length;
@@ -139,64 +154,60 @@ async function preloadAllImages(onProgress: (loaded: number, total: number) => v
   console.log(`[Preload] ✅ ${loaded}/${total} images chargées!`);
 }
 
-// Écran de chargement personnalisé
-function LoadingScreen({ progress, loadedCount, totalCount }: { progress: number; loadedCount: number; totalCount: number }) {
-  const pulseAnim = useState(new Animated.Value(1))[0];
-  
-  useEffect(() => {
-    const pulse = Animated.loop(
-      Animated.sequence([
-        Animated.timing(pulseAnim, {
-          toValue: 1.1,
-          duration: 800,
-          useNativeDriver: true,
-        }),
-        Animated.timing(pulseAnim, {
-          toValue: 1,
-          duration: 800,
-          useNativeDriver: true,
-        }),
-      ])
-    );
-    pulse.start();
-    return () => pulse.stop();
-  }, []);
+// Vidéo splash screen - 0129(1) (1).mp4 (copie = splash-opening.mp4 pour compatibilité Metro)
+const SPLASH_VIDEO = require('@/assets/images/splash-opening.mp4');
+
+const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
+
+// Écran de chargement personnalisé avec vidéo splash
+function LoadingScreen({ progress, loadedCount, totalCount, videoUri }: { progress: number; loadedCount: number; totalCount: number; videoUri: string | null }) {
+  const videoSource = videoUri ? { uri: videoUri } : SPLASH_VIDEO;
   
   return (
     <View style={styles.loadingContainer}>
       <StatusBar style="light" />
       
-      {/* Logo animé */}
-      <Animated.View style={[styles.logoContainer, { transform: [{ scale: pulseAnim }] }]}>
+      {/* Vidéo splash en plein écran */}
+      {Platform.OS !== 'web' ? (
+        <Video
+          source={videoSource}
+          style={styles.splashVideo}
+          resizeMode={ResizeMode.COVER}
+          shouldPlay
+          isLooping={false}
+          isMuted
+          useNativeControls={false}
+          usePoster={false}
+        />
+      ) : (
         <Image
           source={require('@/assets/images/logo.png')}
-          style={styles.logo}
+          style={styles.fallbackLogo}
           resizeMode="contain"
         />
-      </Animated.View>
+      )}
       
-      {/* Barre de progression */}
-      <View style={styles.progressContainer}>
+      {/* Overlay semi-transparent avec barre de progression */}
+      <View style={styles.progressOverlay}>
         <View style={styles.progressTrack}>
           <Animated.View style={[styles.progressBar, { width: `${Math.min(100, progress)}%` }]} />
         </View>
         <Text style={styles.progressText}>
           {progress < 100 
-            ? `Chargement des ressources... ${loadedCount}/${totalCount}`
+            ? `Chargement... ${loadedCount}/${totalCount}`
             : 'Prêt !'}
         </Text>
+        {progress < 100 && (
+          <ActivityIndicator size="small" color="#F5C400" style={styles.spinner} />
+        )}
       </View>
-      
-      {/* Indicateur de chargement */}
-      {progress < 100 && (
-        <ActivityIndicator size="small" color="#F5C400" style={styles.spinner} />
-      )}
     </View>
   );
 }
 
 export default function RootLayout() {
   const [appIsReady, setAppIsReady] = useState(false);
+  const [videoUri, setVideoUri] = useState<string | null>(null);
   const [loadingProgress, setLoadingProgress] = useState(0);
   const [loadedCount, setLoadedCount] = useState(0);
   const [totalCount, setTotalCount] = useState(allAppImages.length);
@@ -235,8 +246,6 @@ export default function RootLayout() {
         needsUpdate: boolean;
         message: string;
         storeUrl: string;
-        iosStoreUrl: string;
-        androidStoreUrl: string;
       }>(`/api/app/version-check?app=client&version=${appVersion}&platform=${platform}`);
       
       console.log('[Version Check] Response:', response);
@@ -245,7 +254,7 @@ export default function RootLayout() {
         console.log('[Version Check] ⚠️ Update required!');
         setUpdateRequired(true);
         setUpdateMessage(response.message || 'Une mise à jour est requise.');
-        setUpdateStoreUrl(response.storeUrl || (platform === 'ios' ? response.iosStoreUrl : response.androidStoreUrl));
+        setUpdateStoreUrl(response.storeUrl || '');
       }
     } catch (error) {
       console.log('[Version Check] Error (continuing anyway):', error);
@@ -259,6 +268,16 @@ export default function RootLayout() {
       try {
         console.log('[Preload] Début du préchargement complet...');
         
+        // Précharger la vidéo splash et obtenir l'URI locale
+        const uri = await preloadSplashVideo();
+        setVideoUri(uri);
+        
+        // Laisser React re-render avec la vidéo avant de cacher le splash
+        await new Promise(resolve => setTimeout(resolve, 50));
+        
+        // Cacher le splash natif quand la vidéo est prête
+        await SplashScreen.hideAsync();
+        
         // Précharger toutes les images avec progression réelle
         await preloadAllImages((loaded, total) => {
           setLoadedCount(loaded);
@@ -268,6 +287,9 @@ export default function RootLayout() {
         
         // Petit délai pour s'assurer que tout est en mémoire
         await new Promise(resolve => setTimeout(resolve, 300));
+        
+        // Durée minimum du splash vidéo pour que l'utilisateur puisse le voir (2 secondes)
+        await new Promise(resolve => setTimeout(resolve, 2000));
         
         // Vérifier la version de l'app
         await checkAppVersion();
@@ -301,7 +323,7 @@ export default function RootLayout() {
   }, [appIsReady]);
 
   if (!fontsLoaded || !appIsReady) {
-    return <LoadingScreen progress={loadingProgress} loadedCount={loadedCount} totalCount={totalCount} />;
+    return <LoadingScreen progress={loadingProgress} loadedCount={loadedCount} totalCount={totalCount} videoUri={videoUri} />;
   }
 
   return (
@@ -334,25 +356,32 @@ const styles = StyleSheet.create({
   loadingContainer: {
     flex: 1,
     backgroundColor: '#1a1a1a',
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingHorizontal: 40,
   },
-  logoContainer: {
-    marginBottom: 60,
+  splashVideo: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    width: SCREEN_WIDTH,
+    height: SCREEN_HEIGHT,
   },
-  logo: {
+  fallbackLogo: {
     width: 180,
     height: 80,
+    alignSelf: 'center',
+    marginTop: '40%',
   },
-  progressContainer: {
-    width: '100%',
+  progressOverlay: {
+    position: 'absolute',
+    bottom: 80,
+    left: 0,
+    right: 0,
     alignItems: 'center',
+    paddingHorizontal: 40,
   },
   progressTrack: {
     width: '80%',
     height: 6,
-    backgroundColor: 'rgba(255, 255, 255, 0.15)',
+    backgroundColor: 'rgba(255, 255, 255, 0.3)',
     borderRadius: 3,
     overflow: 'hidden',
   },
@@ -364,7 +393,7 @@ const styles = StyleSheet.create({
   progressText: {
     marginTop: 16,
     fontSize: 13,
-    color: 'rgba(255, 255, 255, 0.7)',
+    color: 'rgba(255, 255, 255, 0.9)',
     fontWeight: '500',
   },
   spinner: {

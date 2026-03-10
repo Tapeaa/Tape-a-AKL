@@ -39,3 +39,11 @@ yarn-error.*
 *.tsbuildinfo
 
 app-example
+
+# Replit
+.replit
+.local/
+
+# IDE
+.cursor/
+.config/

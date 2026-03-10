@@ -17,7 +17,7 @@ export default {
     userInterfaceStyle: "automatic",
     newArchEnabled: true,
     ios: {
-      supportsTablet: true,
+      supportsTablet: false,
       bundleIdentifier: "com.tapea.customer",
       entitlements: {
         "com.apple.security.application-groups": [
@@ -26,8 +26,17 @@ export default {
       },
       infoPlist: {
         ITSAppUsesNonExemptEncryption: false,
+        // Permissions de localisation
         NSLocationWhenInUseUsageDescription: "TĀPE'A utilise votre position pour trouver des taxis à proximité et suivre votre course en temps réel.",
         NSLocationAlwaysAndWhenInUseUsageDescription: "TĀPE'A utilise votre position pour trouver des taxis à proximité et suivre votre course en temps réel.",
+        // Permissions caméra et galerie (photo de profil)
+        NSCameraUsageDescription: "TĀPE'A utilise la caméra pour vous permettre de prendre une photo de profil.",
+        NSPhotoLibraryUsageDescription: "TĀPE'A accède à votre galerie pour vous permettre de choisir une photo de profil.",
+        NSPhotoLibraryAddUsageDescription: "TĀPE'A peut enregistrer des photos dans votre galerie.",
+        // Permissions microphone (appels)
+        NSMicrophoneUsageDescription: "TĀPE'A peut utiliser le microphone pour les appels avec votre chauffeur.",
+        // Permissions contacts (partage de course)
+        NSContactsUsageDescription: "TĀPE'A peut accéder à vos contacts pour faciliter le partage de votre course.",
       },
       config: {
         googleMapsApiKey: process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY || process.env.GOOGLE_MAPS_API_KEY || "",
@@ -64,7 +73,7 @@ export default {
           image: "./assets/images/logoappclienttapea.png",
           imageWidth: 200,
           resizeMode: "contain",
-          backgroundColor: "#ffffff",
+          backgroundColor: "#1a1a1a",
         },
       ],
       [

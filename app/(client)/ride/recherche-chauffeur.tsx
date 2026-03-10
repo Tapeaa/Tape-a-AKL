@@ -18,8 +18,10 @@ import {
   onBookingConfirmed,
   onOrderExpired,
   onClientJoinError,
+  onFraisServiceOfferts,
   disconnectSocket,
 } from '@/lib/socket';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import type { AddressField, Supplement } from '@/lib/types';
 import { apiFetch } from '@/lib/api';
 
@@ -595,6 +597,28 @@ export default function RechercheChauffeureScreen() {
     });
 
     // ═══════════════════════════════════════════════════════════════════════════
+    // FRAIS DE SERVICE OFFERTS: Écouter quand un salarié TAPEA accepte
+    // Stocker les infos pour les afficher sur la page course-en-cours
+    // ═══════════════════════════════════════════════════════════════════════════
+    const unsubscribeFraisOfferts = onFraisServiceOfferts(async (data) => {
+      if (data.orderId === orderId) {
+        console.log('[ORDER] 🎉 Frais de service offerts reçus pendant recherche!', data);
+        // Stocker les données dans AsyncStorage pour les récupérer sur course-en-cours
+        try {
+          await AsyncStorage.setItem(`frais_offerts_${orderId}`, JSON.stringify({
+            ancienPrix: data.ancienPrix,
+            nouveauPrix: data.nouveauPrix,
+            economie: data.economie,
+            timestamp: Date.now(),
+          }));
+          console.log('[ORDER] Frais offerts stockés dans AsyncStorage');
+        } catch (e) {
+          console.error('[ORDER] Erreur stockage frais offerts:', e);
+        }
+      }
+    });
+
+    // ═══════════════════════════════════════════════════════════════════════════
     // RÉSERVATION À L'AVANCE: Écouter la confirmation de réservation
     // ═══════════════════════════════════════════════════════════════════════════
     const unsubscribeBookingConfirmed = onBookingConfirmed((data) => {
@@ -629,6 +653,7 @@ export default function RechercheChauffeureScreen() {
 
     return () => {
       unsubscribeDriverAssigned();
+      unsubscribeFraisOfferts();
       unsubscribeBookingConfirmed();
       unsubscribeOrderExpired();
       unsubscribeJoinError();

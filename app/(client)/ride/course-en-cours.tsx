@@ -33,6 +33,7 @@ import {
   endLiveActivity,
   apiFetch,
   apiPost,
+  getFraisServiceConfig,
 } from '@/lib/api';
 import {
   connectSocketAsync,
@@ -55,8 +56,10 @@ import {
   cleanupOrderConnection,
   onPaidStopStarted,
   onPaidStopEnded,
+  onFraisServiceOfferts,
 } from '@/lib/socket';
 import Constants from 'expo-constants';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 // Import conditionnel des maps selon la plateforme (Expo gère automatiquement .native.tsx vs .tsx)
 import { MapView, Marker, Polyline, isMapsAvailable } from '@/lib/maps';
@@ -149,6 +152,14 @@ export default function CourseEnCoursClientScreen() {
   const [showRatingModal, setShowRatingModal] = useState(false);
   const [paymentFlowCompleted, setPaymentFlowCompleted] = useState(false);
   const [paymentPopupDismissed, setPaymentPopupDismissed] = useState(false);
+  
+  // État pour le modal des frais de service offerts
+  const [showFraisOffertsModal, setShowFraisOffertsModal] = useState(false);
+  const [fraisOffertsData, setFraisOffertsData] = useState<{
+    ancienPrix: number;
+    nouveauPrix: number;
+    economie: number;
+  } | null>(null);
   // Refs pour éviter les problèmes de closure dans les callbacks socket
   const paymentFlowCompletedRef = useRef(false);
   const showPaymentResultRef = useRef(false);
@@ -168,6 +179,7 @@ export default function CourseEnCoursClientScreen() {
   const [showPriceDetailsModal, setShowPriceDetailsModal] = useState(false);
   const [tarifs, setTarifs] = useState<any[]>([]);
   const [supplements, setSupplements] = useState<any[]>([]);
+  const [fraisServicePercent, setFraisServicePercent] = useState(15);
   const waitingRate = 47; // Tarif d'attente: 47 XPF/min après 5 min gratuites
   const PAID_STOP_RATE = 42; // Tarif arrêt payant: 42 XPF/min dès la 1ère min
   const liveActivityStartedRef = useRef(false);
@@ -430,16 +442,19 @@ export default function CourseEnCoursClientScreen() {
   // Pas besoin de restaurer order depuis orderRef - Socket.IO va se reconnecter
   // et les listeners Socket.IO vont mettre à jour l'état
 
-  // Récupérer les tarifs et suppléments pour le détail des prix
+  // Récupérer les tarifs, suppléments et config frais de service pour le détail des prix
   useEffect(() => {
     const fetchTarifsAndSupplements = async () => {
       try {
-        const [tarifsData, supplementsData] = await Promise.all([
+        const [tarifsData, supplementsData, fraisConfig] = await Promise.all([
           apiFetch<any[]>(`/api/tarifs`).catch(() => []),
           apiFetch<any[]>(`/api/supplements`).catch(() => []),
+          getFraisServiceConfig().catch(() => ({ fraisServicePrestataire: 15, commissionPrestataire: 0, commissionSalarieTapea: 0 })),
         ]);
         setTarifs(tarifsData || []);
         setSupplements(supplementsData || []);
+        setFraisServicePercent(fraisConfig.fraisServicePrestataire);
+        console.log('[COURSE_EN_COURS] Frais de service chargés:', fraisConfig.fraisServicePrestataire + '%');
       } catch (error) {
         console.error('[COURSE_EN_COURS] Error fetching tarifs/supplements:', error);
       }
@@ -744,6 +759,32 @@ export default function CourseEnCoursClientScreen() {
           }
         }
         
+        // ═══════════════════════════════════════════════════════════════════════════
+        // FRAIS DE SERVICE OFFERTS: Vérifier si les frais sont offerts (indépendant du statut précédent)
+        // ═══════════════════════════════════════════════════════════════════════════
+        const extendedData = data as typeof data & { fraisServiceOfferts?: boolean };
+        if (extendedData.fraisServiceOfferts === true && mappedStatus === 'inprogress' && order) {
+          // Calculer l'économie : prix initial (avec frais service) vs prix actuel (sans frais service)
+          const initialPrice = (order.rideOption as any)?.initialTotalPrice || Math.round((data.totalPrice || order.totalPrice) * (1 + fraisServicePercent / 100));
+          const nouveauPrix = data.totalPrice || order.totalPrice;
+          const economie = initialPrice - nouveauPrix;
+          
+          if (economie > 0) {
+            console.log('[COURSE_EN_COURS] 🎁 Frais de service offerts détectés au démarrage!', {
+              ancienPrix: initialPrice,
+              nouveauPrix,
+              economie
+            });
+            
+            setFraisOffertsData({
+              ancienPrix: initialPrice,
+              nouveauPrix: nouveauPrix,
+              economie: economie,
+            });
+            setShowFraisOffertsModal(true);
+          }
+        }
+        
         // Mettre à jour le statut seulement s'il a vraiment changé
         if (lastKnownStatusRef.current !== mappedStatus) {
           lastKnownStatusRef.current = mappedStatus;
@@ -1042,6 +1083,76 @@ export default function CourseEnCoursClientScreen() {
     };
   }, [order?.id]);
 
+  // ═══════════════════════════════════════════════════════════════════════════
+  // FRAIS DE SERVICE OFFERTS: Écouter quand un salarié TAPEA accepte la course
+  // ═══════════════════════════════════════════════════════════════════════════
+  useEffect(() => {
+    if (!order?.id) return;
+
+    const unsubscribeFraisOfferts = onFraisServiceOfferts((data) => {
+      if (data.orderId === order.id) {
+        console.log('[COURSE_EN_COURS] 🎉 Frais de service offerts !', data);
+        setFraisOffertsData({
+          ancienPrix: data.ancienPrix,
+          nouveauPrix: data.nouveauPrix,
+          economie: data.economie,
+        });
+        setShowFraisOffertsModal(true);
+        
+        // Mettre à jour le prix de la commande localement
+        setOrder(prev => prev ? {
+          ...prev,
+          totalPrice: data.nouveauPrix,
+        } : prev);
+      }
+    });
+
+    return () => {
+      unsubscribeFraisOfferts();
+    };
+  }, [order?.id]);
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // FRAIS DE SERVICE OFFERTS: Vérifier au chargement si des frais ont été stockés
+  // (depuis la page recherche-chauffeur quand l'événement a été reçu pendant la navigation)
+  // ═══════════════════════════════════════════════════════════════════════════
+  useEffect(() => {
+    if (!order?.id) return;
+
+    const checkStoredFraisOfferts = async () => {
+      try {
+        const storedData = await AsyncStorage.getItem(`frais_offerts_${order.id}`);
+        if (storedData) {
+          const data = JSON.parse(storedData);
+          // Vérifier que les données ne sont pas trop vieilles (moins de 60 secondes)
+          if (Date.now() - data.timestamp < 60000) {
+            console.log('[COURSE_EN_COURS] 🎉 Frais de service offerts récupérés depuis AsyncStorage!', data);
+            setFraisOffertsData({
+              ancienPrix: data.ancienPrix,
+              nouveauPrix: data.nouveauPrix,
+              economie: data.economie,
+            });
+            setShowFraisOffertsModal(true);
+            
+            // Mettre à jour le prix de la commande localement
+            setOrder(prev => prev ? {
+              ...prev,
+              totalPrice: data.nouveauPrix,
+            } : prev);
+          }
+          // Supprimer les données après utilisation
+          await AsyncStorage.removeItem(`frais_offerts_${order.id}`);
+        }
+      } catch (e) {
+        console.error('[COURSE_EN_COURS] Erreur récupération frais offerts:', e);
+      }
+    };
+
+    // Vérifier après un court délai pour laisser le temps au composant de se charger
+    const timer = setTimeout(checkStoredFraisOfferts, 500);
+    return () => clearTimeout(timer);
+  }, [order?.id]);
+
   // Fonction pour formater le temps d'arrêt
   const formatPaidStopTime = (seconds: number) => {
     const mins = Math.floor(seconds / 60);
@@ -1112,8 +1223,11 @@ export default function CourseEnCoursClientScreen() {
           // Gérer le timer d'attente
           const previousStatus = lastKnownStatusRef.current;
           if (mappedStatus === 'arrived' && previousStatus !== 'arrived') {
-            setArrivedAt(new Date());
-            setWaitingTime(0);
+            const apiArrivedAt = (response as any).driverArrivedAt || (response.rideOption as any)?.driverArrivedAt;
+            const arrivedDate = apiArrivedAt ? new Date(apiArrivedAt) : new Date();
+            setArrivedAt(arrivedDate);
+            const elapsed = Math.floor((Date.now() - arrivedDate.getTime()) / 1000);
+            setWaitingTime(elapsed > 0 ? elapsed : 0);
           } else if (mappedStatus === 'inprogress' && previousStatus === 'arrived') {
             if (arrivedAt) {
               const elapsedSeconds = Math.floor((Date.now() - arrivedAt.getTime()) / 1000);
@@ -1162,11 +1276,13 @@ export default function CourseEnCoursClientScreen() {
             setPaidStopsCost(newPaidStopsCost);
           }
           
+          const apiDriverArrivedAt = (response as any).driverArrivedAt ?? (response.rideOption as any)?.driverArrivedAt;
           return {
             ...prev,
             totalPrice: response.totalPrice ?? prev.totalPrice,
             driverEarnings: response.driverEarnings ?? prev.driverEarnings,
             waitingTimeMinutes: response.waitingTimeMinutes ?? prev.waitingTimeMinutes,
+            driverArrivedAt: apiDriverArrivedAt ?? prev.driverArrivedAt,
             rideOption: {
               ...prev.rideOption,
               paidStopsCost: newPaidStopsCost ?? (prev.rideOption as any)?.paidStopsCost
@@ -2852,6 +2968,9 @@ export default function CourseEnCoursClientScreen() {
           supplements={paymentResult.supplements}
           passengers={order?.passengers}
           orderId={order?.id}
+          fraisServiceOfferts={(order?.rideOption as any)?.fraisServiceOfferts === true}
+          initialTotalPrice={(order?.rideOption as any)?.initialTotalPrice}
+          fraisServicePercent={fraisServicePercent}
           onRetry={handlePaymentRetry}
           onSwitchToCash={handleSwitchToCash}
           onClose={() => {
@@ -3148,6 +3267,74 @@ export default function CourseEnCoursClientScreen() {
                       </View>
                     )}
                     
+                    {/* Frais de service (% configurable) */}
+                    {(() => {
+                      const rideOpt = order.rideOption as any;
+                      const fraisOfferts = rideOpt?.fraisServiceOfferts === true;
+                      // Calculer les frais de service : soit depuis initialTotalPrice, soit X% du subtotal
+                      const initialPrice = rideOpt?.initialTotalPrice;
+                      let fraisService = 0;
+                      
+                      if (initialPrice && initialPrice > order.totalPrice) {
+                        // Prix initial disponible (salarié TAPEA qui a offert les frais)
+                        fraisService = initialPrice - order.totalPrice;
+                      } else if (!fraisOfferts) {
+                        // Pas offert : calculer X% du subtotal (le totalPrice inclut déjà les frais)
+                        // subtotal = totalPrice / (1 + X/100), donc frais = totalPrice - subtotal
+                        const subtotalEstime = Math.round(order.totalPrice / (1 + fraisServicePercent / 100));
+                        fraisService = order.totalPrice - subtotalEstime;
+                      }
+                      
+                      // Toujours afficher la ligne si on a un montant de frais
+                      if (fraisService > 0 || fraisOfferts) {
+                        // Si offert mais pas de montant calculé, estimer les frais
+                        if (fraisOfferts && fraisService === 0) {
+                          fraisService = Math.round(order.totalPrice * 0.15);
+                        }
+                        
+                        return (
+                          <View style={styles.priceDetailRow}>
+                            <View style={styles.priceDetailRowLeft}>
+                              <View style={styles.priceDetailIconContainer}>
+                                <Ionicons 
+                                  name={fraisOfferts ? "gift" : "pricetag"} 
+                                  size={16} 
+                                  color={fraisOfferts ? "#22C55E" : "#3B82F6"} 
+                                />
+                              </View>
+                              <View style={styles.priceDetailLabelContainer}>
+                                <Text style={styles.priceDetailLabel}>Frais de service ({fraisServicePercent}%)</Text>
+                                {fraisOfferts && (
+                                  <Text style={[styles.priceDetailSubLabel, { color: '#22C55E', fontWeight: '600' }]}>
+                                    Offerts par Tāpe'a
+                                  </Text>
+                                )}
+                              </View>
+                            </View>
+                            {fraisOfferts ? (
+                              <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                                <Text style={[styles.priceDetailValue, { 
+                                  textDecorationLine: 'line-through', 
+                                  color: '#9CA3AF',
+                                  marginRight: 8
+                                }]}>
+                                  {formatPrice(fraisService)}
+                                </Text>
+                                <Text style={[styles.priceDetailValue, { color: '#22C55E', fontWeight: '700' }]}>
+                                  Offert
+                                </Text>
+                              </View>
+                            ) : (
+                              <Text style={[styles.priceDetailValue, { color: '#3B82F6' }]}>
+                                {formatPrice(fraisService)}
+                              </Text>
+                            )}
+                          </View>
+                        );
+                      }
+                      return null;
+                    })()}
+                    
                     <View style={styles.priceDetailSeparator} />
                     
                     <View style={styles.priceDetailRowTotal}>
@@ -3200,6 +3387,62 @@ export default function CourseEnCoursClientScreen() {
                 )}
               </TouchableOpacity>
             </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* MODAL FRAIS DE SERVICE OFFERTS - Notification positive quand un salarié TAPEA accepte */}
+      <Modal
+        visible={showFraisOffertsModal}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => setShowFraisOffertsModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.fraisOffertsModalContent}>
+            {/* Confetti/Celebration background effect */}
+            <View style={styles.fraisOffertsHeader}>
+              <View style={styles.fraisOffertsIconCircle}>
+                <Ionicons name="gift" size={40} color="#22C55E" />
+              </View>
+              <Text variant="h2" style={styles.fraisOffertsTitle}>
+                Bonne nouvelle !
+              </Text>
+              <Text style={styles.fraisOffertsSubtitle}>
+                Les frais de service vous sont offerts ! 🎉
+              </Text>
+            </View>
+            
+            {fraisOffertsData && (
+              <View style={styles.fraisOffertsDetails}>
+                <View style={styles.fraisOffertsRow}>
+                  <Text style={styles.fraisOffertsLabel}>Ancien prix</Text>
+                  <Text style={styles.fraisOffertsOldPrice}>
+                    {fraisOffertsData.ancienPrix.toLocaleString()} XPF
+                  </Text>
+                </View>
+                <View style={styles.fraisOffertsDivider} />
+                <View style={styles.fraisOffertsRow}>
+                  <Text style={styles.fraisOffertsLabel}>Nouveau prix</Text>
+                  <Text style={styles.fraisOffertsNewPrice}>
+                    {fraisOffertsData.nouveauPrix.toLocaleString()} XPF
+                  </Text>
+                </View>
+                <View style={styles.fraisOffertsSavings}>
+                  <Ionicons name="sparkles" size={18} color="#22C55E" />
+                  <Text style={styles.fraisOffertsSavingsText}>
+                    Vous économisez {fraisOffertsData.economie.toLocaleString()} XPF
+                  </Text>
+                </View>
+              </View>
+            )}
+
+            <TouchableOpacity
+              style={styles.fraisOffertsButton}
+              onPress={() => setShowFraisOffertsModal(false)}
+            >
+              <Text style={styles.fraisOffertsButtonText}>Super, merci !</Text>
+            </TouchableOpacity>
           </View>
         </View>
       </Modal>
@@ -3966,5 +4209,108 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: '#6B7280',
     lineHeight: 18,
+  },
+  // ═══════════════════════════════════════════════════════════════════════════
+  // STYLES MODAL FRAIS DE SERVICE OFFERTS
+  // ═══════════════════════════════════════════════════════════════════════════
+  fraisOffertsModalContent: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 28,
+    padding: 28,
+    width: '90%',
+    maxWidth: 360,
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.25,
+    shadowRadius: 20,
+    elevation: 10,
+  },
+  fraisOffertsHeader: {
+    alignItems: 'center',
+    marginBottom: 24,
+  },
+  fraisOffertsIconCircle: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    backgroundColor: '#DCFCE7',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  fraisOffertsTitle: {
+    fontSize: 24,
+    fontWeight: '700',
+    color: '#1F2937',
+    marginBottom: 8,
+  },
+  fraisOffertsSubtitle: {
+    fontSize: 15,
+    color: '#6B7280',
+    textAlign: 'center',
+  },
+  fraisOffertsDetails: {
+    width: '100%',
+    backgroundColor: '#F9FAFB',
+    borderRadius: 16,
+    padding: 20,
+    marginBottom: 24,
+  },
+  fraisOffertsRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 8,
+  },
+  fraisOffertsLabel: {
+    fontSize: 14,
+    color: '#6B7280',
+  },
+  fraisOffertsOldPrice: {
+    fontSize: 16,
+    color: '#9CA3AF',
+    textDecorationLine: 'line-through',
+  },
+  fraisOffertsNewPrice: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: '#22C55E',
+  },
+  fraisOffertsDivider: {
+    height: 1,
+    backgroundColor: '#E5E7EB',
+    marginVertical: 8,
+  },
+  fraisOffertsSavings: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    marginTop: 12,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: '#E5E7EB',
+  },
+  fraisOffertsSavingsText: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#22C55E',
+  },
+  fraisOffertsButton: {
+    backgroundColor: '#22C55E',
+    paddingVertical: 16,
+    paddingHorizontal: 48,
+    borderRadius: 16,
+    shadowColor: '#22C55E',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  fraisOffertsButtonText: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#FFFFFF',
   },
 });

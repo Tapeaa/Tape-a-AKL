@@ -687,3 +687,35 @@ export async function clearCachedOrder(): Promise<void> {
     console.warn('Failed to clear cached order:', error);
   }
 }
+
+// ============ FRAIS DE SERVICE CONFIG ============
+
+export async function getFraisServiceConfig(): Promise<{
+  fraisServicePrestataire: number;
+  commissionPrestataire: number;
+  commissionSalarieTapea: number;
+}> {
+  try {
+    const response = await apiFetch<{
+      success: boolean;
+      config: {
+        fraisServicePrestataire: number;
+        commissionPrestataire: number;
+        commissionSalarieTapea: number;
+      };
+    }>('/api/frais-service-config', { skipAuth: true });
+    
+    return response.config || {
+      fraisServicePrestataire: 15,
+      commissionPrestataire: 0,
+      commissionSalarieTapea: 0,
+    };
+  } catch (error) {
+    console.warn('Failed to get frais service config, using defaults:', error);
+    return {
+      fraisServicePrestataire: 15,
+      commissionPrestataire: 0,
+      commissionSalarieTapea: 0,
+    };
+  }
+}

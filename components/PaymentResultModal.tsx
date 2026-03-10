@@ -19,6 +19,9 @@ interface PaymentResultModalProps {
   supplements?: Array<{ nom?: string; name?: string; prixXpf?: number; price?: number; quantity?: number }>; // Suppléments
   passengers?: number; // Nombre de passagers pour la majoration +5 passagers
   orderId?: string; // ID de la commande pour télécharger le reçu
+  fraisServiceOfferts?: boolean; // Si les frais de service sont offerts (salarié TAPEA)
+  initialTotalPrice?: number; // Prix initial avant déduction des frais (pour calculer l'économie)
+  fraisServicePercent?: number; // % de frais de service (pour affichage dynamique)
   onRetry?: () => void;
   onSwitchToCash?: () => void;
   onClose: () => void;
@@ -37,6 +40,9 @@ export function PaymentResultModal({
   supplements,
   passengers,
   orderId,
+  fraisServiceOfferts,
+  initialTotalPrice,
+  fraisServicePercent = 15,
   onRetry,
   onSwitchToCash,
   onClose,
@@ -79,12 +85,24 @@ export function PaymentResultModal({
   // Majoration passagers (500 XPF si >= 5 passagers)
   const majorationPassagers = (passengers && passengers >= 5) ? 500 : 0;
   
-  // Prix de base = montant total - frais d'attente - arrêts payants - suppléments - majoration passagers
-  const rawBasePrice = amount - waitingFee - paidStopsValue - supplementsTotal - majorationPassagers;
+  // Calculer les frais de service (% configurable)
+  let fraisService = 0;
+  if (fraisServiceOfferts && initialTotalPrice && initialTotalPrice > amount) {
+    // Frais offerts : calculer à partir du prix initial
+    fraisService = initialTotalPrice - amount;
+  } else if (!fraisServiceOfferts) {
+    // Frais normaux : le montant inclut les frais, donc on les estime
+    // subtotal = amount / (1 + X/100), frais = amount - subtotal
+    const subtotalEstime = Math.round(amount / (1 + fraisServicePercent / 100));
+    fraisService = amount - subtotalEstime;
+  }
+  
+  // Prix de base = montant total - frais d'attente - arrêts payants - suppléments - majoration passagers - frais service
+  const rawBasePrice = amount - waitingFee - paidStopsValue - supplementsTotal - majorationPassagers - (fraisServiceOfferts ? 0 : fraisService);
   const basePrice = isNaN(rawBasePrice) || rawBasePrice < 0 ? amount : rawBasePrice;
   
-  // Vérifier s'il y a des détails à afficher (suppléments, attente, arrêts payants, ou majoration passagers)
-  const hasDetails = supplementsTotal > 0 || waitingFee > 0 || paidStopsValue > 0 || majorationPassagers > 0;
+  // Vérifier s'il y a des détails à afficher (suppléments, attente, arrêts payants, majoration passagers, ou frais service)
+  const hasDetails = supplementsTotal > 0 || waitingFee > 0 || paidStopsValue > 0 || majorationPassagers > 0 || fraisService > 0;
 
   return (
     <Modal
@@ -188,6 +206,47 @@ export function PaymentResultModal({
                         <Text variant="caption" style={[styles.waitingFee, { color: '#EF4444' }]}>
                           {`+${formatPrice(paidStopsValue)}`}
                         </Text>
+                      </View>
+                    )}
+                    
+                    {/* Frais de service (% configurable) */}
+                    {fraisService > 0 && (
+                      <View style={styles.priceRow}>
+                        <View style={styles.waitingRow}>
+                          <Ionicons 
+                            name={fraisServiceOfferts ? "gift-outline" : "pricetag-outline"} 
+                            size={16} 
+                            color={fraisServiceOfferts ? "#22C55E" : "#3B82F6"} 
+                          />
+                          <View>
+                            <Text variant="caption" style={[styles.waitingLabel, { color: fraisServiceOfferts ? '#22C55E' : '#3B82F6' }]}>
+                              {`Frais de service (${fraisServicePercent}%)`}
+                            </Text>
+                            {fraisServiceOfferts && (
+                              <Text variant="caption" style={{ color: '#22C55E', fontSize: 11, fontWeight: '600' }}>
+                                Offerts par Tāpe'a
+                              </Text>
+                            )}
+                          </View>
+                        </View>
+                        {fraisServiceOfferts ? (
+                          <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                            <Text variant="caption" style={[styles.waitingFee, { 
+                              textDecorationLine: 'line-through', 
+                              color: '#9CA3AF',
+                              marginRight: 6
+                            }]}>
+                              {formatPrice(fraisService)}
+                            </Text>
+                            <Text variant="caption" style={[styles.waitingFee, { color: '#22C55E', fontWeight: '700' }]}>
+                              Offert
+                            </Text>
+                          </View>
+                        ) : (
+                          <Text variant="caption" style={[styles.waitingFee, { color: '#3B82F6' }]}>
+                            {`+${formatPrice(fraisService)}`}
+                          </Text>
+                        )}
                       </View>
                     )}
                     

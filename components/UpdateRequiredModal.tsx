@@ -46,7 +46,7 @@ export function UpdateRequiredModal({ visible, message, storeUrl }: UpdateRequir
           <TouchableOpacity style={styles.updateButton} onPress={handleUpdate}>
             <Ionicons name="download-outline" size={20} color="#1a1a1a" />
             <Text style={styles.updateButtonText}>
-              Mettre à jour sur {Platform.OS === 'ios' ? "l'App Store" : 'Google Play'}
+              Mettre à jour sur l'App Store
             </Text>
           </TouchableOpacity>
 
