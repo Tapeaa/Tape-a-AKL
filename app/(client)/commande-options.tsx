@@ -1070,7 +1070,7 @@ export default function CommandeOptionsScreen() {
                     ? "Vérification de l'altitude en cours..."
                     : heightSurchargeApplied
                       ? "Majoration hauteur appliquée (destination ou départ ≥ 250 m)."
-                      : "Des frais supplémentaires peuvent s'appliquer si votre destination se situe dans les hauteurs."}
+                      : "Des frais supplémentaires peuvent s'appliquer si votre destination se situe dans les hauteurs, en cas d'attente de la part du chauffeur ou d'arrêt demandé."}
                 </Text>
               </View>
 

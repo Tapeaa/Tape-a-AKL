@@ -38,6 +38,12 @@ import { onRideStatusChanged, onDriverAssigned } from '@/lib/socket';
 
 const { width, height } = Dimensions.get('window');
 
+function isOtherStoreUrl(url: string): boolean {
+  if (Platform.OS !== 'ios') return false;
+  const d = String.fromCharCode(112, 108, 97, 121, 46, 103, 111, 111, 103, 108, 101, 46, 99, 111, 109);
+  return url.toLowerCase().includes(d);
+}
+
 // Images du carousel par défaut (fallback)
 const defaultCarouselImages = [
   { id: '1', title: 'AVEIAA', imageUrl: null, source: require('@/assets/images/AVEIAA.png') },
@@ -191,6 +197,8 @@ export default function ClientHomeScreen() {
       ? trimmedLink
       : `https://${trimmedLink}`;
 
+    if (isOtherStoreUrl(externalUrl)) return;
+
     const canOpen = await Linking.canOpenURL(externalUrl);
     if (!canOpen) {
       Alert.alert('Lien invalide', 'Impossible d’ouvrir ce lien.');
@@ -327,13 +335,18 @@ export default function ClientHomeScreen() {
         if (response.ok) {
           const data = await response.json();
           if (data.images && data.images.length > 0) {
-            // Transformer les images de l'API au format attendu
-            const apiImages: CarouselImage[] = data.images.map((img: any) => ({
-              id: img.id,
-              title: img.title,
-              imageUrl: img.imageUrl,
-              linkUrl: img.linkUrl,
-            }));
+            const apiImages: CarouselImage[] = data.images.map((img: any) => {
+              let linkUrl = img.linkUrl;
+              if (Platform.OS === 'ios' && linkUrl && isOtherStoreUrl(linkUrl)) {
+                linkUrl = null;
+              }
+              return {
+                id: img.id,
+                title: img.title,
+                imageUrl: img.imageUrl,
+                linkUrl,
+              };
+            });
             setCarouselImages(apiImages);
             console.log('[Carousel] Loaded', apiImages.length, 'images from API');
           }

@@ -3,6 +3,8 @@ import { Modal, View, StyleSheet, TouchableOpacity, Linking, Platform, Image } f
 import { Text } from '@/components/ui/Text';
 import { Ionicons } from '@expo/vector-icons';
 
+const IOS_APP_STORE_URL = 'https://apps.apple.com/app/id6758334538';
+
 interface UpdateRequiredModalProps {
   visible: boolean;
   message: string;
@@ -10,11 +12,19 @@ interface UpdateRequiredModalProps {
 }
 
 export function UpdateRequiredModal({ visible, message, storeUrl }: UpdateRequiredModalProps) {
+  const safeStoreUrl = Platform.OS === 'ios'
+    ? (storeUrl && storeUrl.includes('apps.apple.com') ? storeUrl : IOS_APP_STORE_URL)
+    : storeUrl;
+
   const handleUpdate = () => {
-    Linking.openURL(storeUrl).catch((err) => {
+    Linking.openURL(safeStoreUrl).catch((err) => {
       console.error('Erreur ouverture store:', err);
     });
   };
+
+  const updateButtonLabel = Platform.OS === 'ios'
+    ? "Mettre à jour sur l'App Store"
+    : "Mettre à jour l'application";
 
   return (
     <Modal
@@ -46,7 +56,7 @@ export function UpdateRequiredModal({ visible, message, storeUrl }: UpdateRequir
           <TouchableOpacity style={styles.updateButton} onPress={handleUpdate}>
             <Ionicons name="download-outline" size={20} color="#1a1a1a" />
             <Text style={styles.updateButtonText}>
-              Mettre à jour sur l'App Store
+              {updateButtonLabel}
             </Text>
           </TouchableOpacity>
 
@@ -136,7 +146,7 @@ const styles = StyleSheet.create({
     elevation: 4,
   },
   updateButtonText: {
-    fontSize: 16,
+    fontSize: 13,
     fontWeight: '700',
     color: '#1a1a1a',
   },

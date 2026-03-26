@@ -1,16 +1,24 @@
+// Même clé que dans android/app/src/main/AndroidManifest.xml (meta-data com.google.android.geo.API_KEY).
+// Les var d'env EAS priment ; le repli évite extra.googleMapsApiKey vide → pas de Directions/geocode en prod.
+const GOOGLE_MAPS_API_KEY_RESOLVED =
+  process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY ||
+  process.env.GOOGLE_MAPS_API_KEY ||
+  "AIzaSyDQ_28lDOBlz9rxYoAX6djaniQ-q9hQHkI";
+
 // Debug: Log des variables d'environnement au build time
 console.log('=== APP.CONFIG.JS DEBUG (BUILD TIME) ===');
 console.log('EXPO_PUBLIC_API_URL:', process.env.EXPO_PUBLIC_API_URL || 'NOT SET');
 console.log('EXPO_PUBLIC_GOOGLE_MAPS_API_KEY:', process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY ? `PRESENT (length: ${process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY.length})` : 'MISSING');
 console.log('GOOGLE_MAPS_API_KEY:', process.env.GOOGLE_MAPS_API_KEY ? `PRESENT (length: ${process.env.GOOGLE_MAPS_API_KEY.length})` : 'MISSING');
 console.log('NODE_ENV:', process.env.NODE_ENV || 'NOT SET');
+console.log('googleMapsApiKey resolved length:', GOOGLE_MAPS_API_KEY_RESOLVED.length);
 console.log('========================================');
 
 export default {
   expo: {
     name: "TĀPE'A",
     slug: "tapea",
-    version: "1.0.0",
+    version: "1.0.1",
     orientation: "portrait",
     icon: "./assets/images/logoappclienttapea.png",
     scheme: "tapea",
@@ -39,25 +47,36 @@ export default {
         NSContactsUsageDescription: "TĀPE'A peut accéder à vos contacts pour faciliter le partage de votre course.",
       },
       config: {
-        googleMapsApiKey: process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY || process.env.GOOGLE_MAPS_API_KEY || "",
+        googleMapsApiKey: GOOGLE_MAPS_API_KEY_RESOLVED,
       },
       runtimeVersion: {
         policy: "appVersion",
       },
     },
     android: {
+      googleServicesFile: "./google-services.json",
       adaptiveIcon: {
         foregroundImage: "./assets/images/logoappclienttapea.png",
         backgroundColor: "#ffffff",
       },
-      edgeToEdgeEnabled: true,
+      edgeToEdgeEnabled: false,
       package: "com.tapea.customer",
+      permissions: [
+        "ACCESS_FINE_LOCATION",
+        "ACCESS_COARSE_LOCATION",
+        "CAMERA",
+        "READ_MEDIA_IMAGES",
+        "INTERNET",
+        "VIBRATE",
+        "RECEIVE_BOOT_COMPLETED",
+        "POST_NOTIFICATIONS",
+      ],
       config: {
         googleMaps: {
-          apiKey: process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY || process.env.GOOGLE_MAPS_API_KEY || "",
+          apiKey: GOOGLE_MAPS_API_KEY_RESOLVED,
         },
       },
-      runtimeVersion: "1.0.0",
+      runtimeVersion: "1.0.1",
     },
     web: {
       bundler: "metro",
@@ -82,14 +101,7 @@ export default {
           locationAlwaysAndWhenInUsePermission: "Autoriser $(PRODUCT_NAME) à utiliser votre position pour trouver des taxis à proximité.",
         },
       ],
-      // Stripe désactivé temporairement pour le build (Apple Pay nécessite configuration Apple Developer)
-      // [
-      //   "@stripe/stripe-react-native",
-      //   {
-      //     merchantIdentifier: "merchant.com.tapea",
-      //     enableGooglePay: true,
-      //   },
-      // ],
+      // Stripe désactivé temporairement (configuration Apple Pay en attente)
       [
         "onesignal-expo-plugin",
         {
@@ -113,7 +125,7 @@ export default {
       // - Pour utiliser le mock local : définir EXPO_PUBLIC_API_URL=http://192.168.99.38:5000/api dans .env
       apiUrl: process.env.EXPO_PUBLIC_API_URL || "https://back-end-tapea.onrender.com/api",
       stripePublishableKey: process.env.EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY || process.env.STRIPE_PUBLISHABLE_KEY || "",
-      googleMapsApiKey: process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY || process.env.GOOGLE_MAPS_API_KEY || "",
+      googleMapsApiKey: GOOGLE_MAPS_API_KEY_RESOLVED,
       oneSignalAppId: "e5e23506-2176-47ce-9861-cae3b49ed002",
     },
   },

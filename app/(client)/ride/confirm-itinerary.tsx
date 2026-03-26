@@ -6,6 +6,7 @@ import {
   Platform,
   Modal,
   ScrollView,
+  Animated,
 } from 'react-native';
 import { Image } from 'expo-image';
 import { useRouter, useLocalSearchParams } from 'expo-router';
@@ -87,6 +88,7 @@ export default function ConfirmItineraryScreen() {
   const [isLoadingRoute, setIsLoadingRoute] = useState(true);
   const [showRouteErrorModal, setShowRouteErrorModal] = useState(false);
   const [routeErrorMessage, setRouteErrorMessage] = useState('');
+  const [isAddressListExpanded, setIsAddressListExpanded] = useState(true);
 
   useEffect(() => {
     // Récupérer les données depuis les params
@@ -624,52 +626,139 @@ export default function ConfirmItineraryScreen() {
         />
       )}
 
-      <View style={styles.summaryContainer}>
-        <View style={styles.summaryPanel}>
-          <View style={styles.dragHandle} />
-          <ScrollView 
-            style={styles.addressScrollView}
-            showsVerticalScrollIndicator={true}
-            nestedScrollEnabled={true}
-            contentContainerStyle={styles.addressListContainer}
+      <View style={[styles.summaryContainer, { paddingBottom: Math.max(insets.bottom, 16) }]}>
+        {stops.length > 0 ? (
+          <TouchableOpacity
+            activeOpacity={0.7}
+            onPress={() => setIsAddressListExpanded(!isAddressListExpanded)}
+            style={styles.toggleHeaderButton}
           >
-            {pickup && (
-              <View style={styles.summaryItem}>
+            <Ionicons
+              name={isAddressListExpanded ? 'chevron-down' : 'chevron-up'}
+              size={16}
+              color="#6B7280"
+            />
+            <Text style={styles.toggleHeaderText}>
+              {isAddressListExpanded ? 'Réduire' : 'Voir le détail'}
+            </Text>
+          </TouchableOpacity>
+        ) : (
+          <View style={styles.dragHandleArea}>
+            <View style={styles.dragHandle} />
+          </View>
+        )}
+
+        {isAddressListExpanded ? (
+          stops.length > 2 ? (
+            <ScrollView
+              style={styles.addressScrollView}
+              showsVerticalScrollIndicator={true}
+              nestedScrollEnabled={true}
+              contentContainerStyle={styles.addressListContainer}
+            >
+              {pickup && (
+                <View style={styles.summaryItem}>
+                  <View style={styles.summaryIconDepart}>
+                    <Ionicons name="radio-button-on" size={16} color="#F5C400" />
+                  </View>
+                  <View style={styles.summaryTextContainer}>
+                    <Text style={styles.summaryLabelDepart}>Départ</Text>
+                    <Text style={styles.summaryAddress} numberOfLines={1}>{pickup.address}</Text>
+                  </View>
+                </View>
+              )}
+
+              {stops.map((stop, index) => (
+                <View key={stop.id || `stop-${index}`} style={styles.summaryItem}>
+                  <View style={styles.summaryIconStop}>
+                    <Ionicons name="add-circle" size={16} color="#F59E0B" />
+                  </View>
+                  <View style={styles.summaryTextContainer}>
+                    <Text style={styles.summaryLabelStop}>Arrêt {index + 1}</Text>
+                    <Text style={styles.summaryAddress} numberOfLines={1}>{stop.address}</Text>
+                  </View>
+                </View>
+              ))}
+
+              {destination && (
+                <View style={styles.summaryItem}>
+                  <View style={styles.summaryIconArrivee}>
+                    <Ionicons name="location" size={16} color="#EF4444" />
+                  </View>
+                  <View style={styles.summaryTextContainer}>
+                    <Text style={styles.summaryLabelArrivee}>Arrivée</Text>
+                    <Text style={styles.summaryAddress} numberOfLines={1}>{destination.address}</Text>
+                  </View>
+                </View>
+              )}
+
+            </ScrollView>
+          ) : (
+            <View style={styles.addressListContainer}>
+              {pickup && (
+                <View style={styles.summaryItem}>
+                  <View style={styles.summaryIconDepart}>
+                    <Ionicons name="radio-button-on" size={16} color="#F5C400" />
+                  </View>
+                  <View style={styles.summaryTextContainer}>
+                    <Text style={styles.summaryLabelDepart}>Départ</Text>
+                    <Text style={styles.summaryAddress} numberOfLines={1}>{pickup.address}</Text>
+                  </View>
+                </View>
+              )}
+
+              {stops.map((stop, index) => (
+                <View key={stop.id || `stop-${index}`} style={styles.summaryItem}>
+                  <View style={styles.summaryIconStop}>
+                    <Ionicons name="add-circle" size={16} color="#F59E0B" />
+                  </View>
+                  <View style={styles.summaryTextContainer}>
+                    <Text style={styles.summaryLabelStop}>Arrêt {index + 1}</Text>
+                    <Text style={styles.summaryAddress} numberOfLines={1}>{stop.address}</Text>
+                  </View>
+                </View>
+              ))}
+
+              {destination && (
+                <View style={styles.summaryItem}>
+                  <View style={styles.summaryIconArrivee}>
+                    <Ionicons name="location" size={16} color="#EF4444" />
+                  </View>
+                  <View style={styles.summaryTextContainer}>
+                    <Text style={styles.summaryLabelArrivee}>Arrivée</Text>
+                    <Text style={styles.summaryAddress} numberOfLines={1}>{destination.address}</Text>
+                  </View>
+                </View>
+              )}
+            </View>
+          )
+        ) : (
+          <View style={styles.addressListContainer}>
+            <View style={styles.collapsedSummary}>
+              <View style={styles.collapsedRow}>
                 <View style={styles.summaryIconDepart}>
-                  <Ionicons name="radio-button-on" size={16} color="#F5C400" />
+                  <Ionicons name="radio-button-on" size={14} color="#F5C400" />
                 </View>
-                <View style={styles.summaryTextContainer}>
-                  <Text style={styles.summaryLabelDepart}>Départ</Text>
-                  <Text style={styles.summaryAddress} numberOfLines={1}>{pickup.address}</Text>
-                </View>
+                <Text style={styles.collapsedAddress} numberOfLines={1}>{pickup?.address}</Text>
               </View>
-            )}
-
-            {stops.map((stop, index) => (
-              <View key={stop.id || `stop-${index}`} style={styles.summaryItem}>
-                <View style={styles.summaryIconStop}>
-                  <Ionicons name="add-circle" size={16} color="#F59E0B" />
-                </View>
-                <View style={styles.summaryTextContainer}>
-                  <Text style={styles.summaryLabelStop}>Arrêt {index + 1}</Text>
-                  <Text style={styles.summaryAddress} numberOfLines={1}>{stop.address}</Text>
-                </View>
-              </View>
-            ))}
-
-            {destination && (
-              <View style={styles.summaryItem}>
+              <Ionicons name="arrow-forward" size={14} color="#D1D5DB" />
+              {stops.length > 0 && (
+                <>
+                  <View style={styles.stopsCountBadge}>
+                    <Text style={styles.stopsCountText}>{stops.length} arrêt{stops.length > 1 ? 's' : ''}</Text>
+                  </View>
+                  <Ionicons name="arrow-forward" size={14} color="#D1D5DB" />
+                </>
+              )}
+              <View style={styles.collapsedRow}>
                 <View style={styles.summaryIconArrivee}>
-                  <Ionicons name="location" size={16} color="#EF4444" />
+                  <Ionicons name="location" size={14} color="#EF4444" />
                 </View>
-                <View style={styles.summaryTextContainer}>
-                  <Text style={styles.summaryLabelArrivee}>Arrivée</Text>
-                  <Text style={styles.summaryAddress} numberOfLines={1}>{destination.address}</Text>
-                </View>
+                <Text style={styles.collapsedAddress} numberOfLines={1}>{destination?.address}</Text>
               </View>
-            )}
-          </ScrollView>
-        </View>
+            </View>
+          </View>
+        )}
 
         <View style={styles.confirmationSection}>
           <Text style={styles.confirmationQuestion}>
@@ -864,7 +953,6 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFFFFF',
     borderTopLeftRadius: 28,
     borderTopRightRadius: 28,
-    maxHeight: '50%',
     zIndex: 5,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: -2 },
@@ -872,28 +960,34 @@ const styles = StyleSheet.create({
     shadowRadius: 8,
     elevation: 8,
   },
-  summaryPanel: {
-    backgroundColor: '#FFFFFF',
-    borderTopLeftRadius: 28,
-    borderTopRightRadius: 28,
-    zIndex: 5,
-    paddingTop: 6,
+  toggleHeaderButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 4,
+    paddingVertical: 10,
+  },
+  toggleHeaderText: {
+    fontSize: 13,
+    color: '#6B7280',
+    fontWeight: '600',
+  },
+  dragHandleArea: {
+    paddingVertical: 6,
+    alignItems: 'center',
   },
   dragHandle: {
     width: 40,
     height: 4,
     backgroundColor: '#D1D5DB',
     borderRadius: 2,
-    alignSelf: 'center',
-    marginTop: 10,
-    marginBottom: 8,
   },
   addressScrollView: {
-    maxHeight: 140,
+    maxHeight: 180,
   },
   addressListContainer: {
     paddingHorizontal: 20,
-    paddingBottom: 120,
+    paddingBottom: 4,
     gap: 8,
   },
   summaryItem: {
@@ -966,11 +1060,60 @@ const styles = StyleSheet.create({
     color: '#1A1A1A',
     fontWeight: '500',
   },
+  toggleListButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 4,
+    paddingVertical: 6,
+    marginTop: 2,
+  },
+  toggleListText: {
+    fontSize: 12,
+    color: '#6B7280',
+    fontWeight: '500',
+  },
+  collapsedSummary: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    backgroundColor: '#FAFAFA',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#F0F0F0',
+  },
+  collapsedRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    flex: 1,
+    minWidth: 0,
+  },
+  collapsedAddress: {
+    fontSize: 12,
+    color: '#1A1A1A',
+    fontWeight: '500',
+    flex: 1,
+  },
+  stopsCountBadge: {
+    backgroundColor: '#FEF3C7',
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 10,
+    flexShrink: 0,
+  },
+  stopsCountText: {
+    fontSize: 10,
+    fontWeight: '600',
+    color: '#D97706',
+  },
   confirmationSection: {
     padding: 18,
     paddingTop: 14,
     marginHorizontal: 12,
-    marginBottom: 16,
+    marginTop: 4,
     backgroundColor: '#FFFFFF',
     borderRadius: 20,
     borderWidth: 1,

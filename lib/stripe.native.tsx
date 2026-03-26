@@ -1,26 +1,32 @@
 import React from 'react';
-import {
-  StripeProvider as RNStripeProvider,
-  CardField as RNCardField,
-  useStripe as useRNStripe,
-  useConfirmSetupIntent as useRNConfirmSetupIntent,
-} from '@stripe/stripe-react-native';
-import Constants from 'expo-constants';
+import { View, Text } from 'react-native';
 
-export const isStripeAvailable = true;
+// Stripe désactivé temporairement (plugin commenté dans app.config.js)
+// Réactiver quand la configuration Apple Pay sera prête
 
-const stripePublishableKey = Constants.expoConfig?.extra?.stripePublishableKey || '';
+export const isStripeAvailable = false;
 
 export const StripeProvider = ({ children }: { children: React.ReactNode }) => {
+  return <View style={{ flex: 1 }}>{children}</View>;
+};
+
+export const CardField = (props: any) => {
   return (
-    <RNStripeProvider publishableKey={stripePublishableKey}>
-      <>{children}</>
-    </RNStripeProvider>
+    <View style={[props.style, { backgroundColor: '#f3f4f6', padding: 16, borderRadius: 8 }]}>
+      <Text style={{ color: '#6b7280' }}>Paiement par carte bientôt disponible</Text>
+    </View>
   );
 };
 
-export const CardField = RNCardField;
+export const useStripe = () => {
+  return {
+    confirmPayment: async () => ({ error: { message: 'Non disponible' } }),
+    createPaymentMethod: async () => ({ error: { message: 'Non disponible' } }),
+  };
+};
 
-export const useStripe = useRNStripe;
-
-export const useConfirmSetupIntent = useRNConfirmSetupIntent;
+export const useConfirmSetupIntent = () => {
+  return {
+    confirmSetupIntent: async () => ({ error: { message: 'Non disponible' } }),
+  };
+};

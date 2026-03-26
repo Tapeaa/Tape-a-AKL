@@ -19,9 +19,11 @@ import { MapView, Marker, Polyline, isMapsAvailable } from '@/lib/maps';
 import Constants from 'expo-constants';
 import { RIDE_OPTIONS } from '@/lib/types';
 import { useTarifs, isNightRate, getCurrentRateLabel, type TarifsConfig } from '@/lib/tarifs';
+import { apiFetch } from '@/lib/api';
 
 // Source unique : app.config.js (via Constants.expoConfig.extra)
 const GOOGLE_MAPS_API_KEY = Constants.expoConfig?.extra?.googleMapsApiKey || '';
+const HEIGHT_SURCHARGE_AMOUNT = 500;
 
 // Log pour debug - vérifier si la clé est disponible
 if (__DEV__ || !GOOGLE_MAPS_API_KEY) {
@@ -108,6 +110,7 @@ export default function ChooseServiceScreen() {
   const [isLoadingRoute, setIsLoadingRoute] = useState(true);
   const [selectedService, setSelectedService] = useState<ServiceType | null>('immediate');
   const [routeDistance, setRouteDistance] = useState<number>(0);
+  const [heightSurchargeApplied, setHeightSurchargeApplied] = useState(false);
 
   useEffect(() => {
     // Récupérer les données depuis les params
@@ -160,6 +163,36 @@ export default function ChooseServiceScreen() {
     calculateRouteAsync(pickupData, destinationData, stopsData).catch((error) => {
       console.error('[CHOOSE_SERVICE] Error calculating route:', error);
     });
+
+    // Vérifier la majoration hauteur
+    const checkHeightSurcharge = async () => {
+      try {
+        const response = await apiFetch<{ applies: boolean }>('/api/height-surcharge-check', {
+          method: 'POST',
+          body: JSON.stringify({
+            pickup: {
+              value: pickupData.address,
+              placeId: pickupData.placeId || '',
+              lat: pickupData.lat,
+              lng: pickupData.lng,
+            },
+            destination: {
+              value: destinationData.address,
+              placeId: destinationData.placeId || '',
+              lat: destinationData.lat,
+              lng: destinationData.lng,
+            },
+          }),
+        });
+        if (response?.applies) {
+          setHeightSurchargeApplied(true);
+          console.log('[CHOOSE_SERVICE] Majoration hauteur appliquée');
+        }
+      } catch (e) {
+        console.warn('[CHOOSE_SERVICE] Height surcharge check failed:', e);
+      }
+    };
+    checkHeightSurcharge();
   }, []);
 
   const calculateRouteAsync = async (
@@ -402,9 +435,10 @@ export default function ChooseServiceScreen() {
   const ratePerKm = isNight ? tarifNuitKm : tarifJourKm;
   
   // Calculer le prix estimé pour taxi immédiat/réservation
+  const heightSurcharge = heightSurchargeApplied ? HEIGHT_SURCHARGE_AMOUNT : 0;
   const estimatedPrice = routeDistance > 0 
-    ? priseEnCharge + Math.round(routeDistance * ratePerKm)
-    : priseEnCharge;
+    ? priseEnCharge + Math.round(routeDistance * ratePerKm) + heightSurcharge
+    : priseEnCharge + heightSurcharge;
 
   const services = [
     {
