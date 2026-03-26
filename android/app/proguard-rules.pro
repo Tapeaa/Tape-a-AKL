@@ -11,4 +11,12 @@
 -keep class com.swmansion.reanimated.** { *; }
 -keep class com.facebook.react.turbomodule.** { *; }
 
+# Google Maps / Play (évite une carte vide si minify/R8 activé un jour)
+-keep class com.google.android.gms.maps.** { *; }
+-keep class com.google.maps.android.** { *; }
+-dontwarn com.google.android.gms.**
+
+# react-native-maps (package com.rnmaps.maps)
+-keep class com.rnmaps.maps.** { *; }
+
 # Add any project specific keep options here:

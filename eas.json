@@ -1,4 +1,5 @@
 {
+  "_comment_play_test": "Même .aab: uploade-le sur la PISTE où tu testes (interne / fermée / prod). Le lien test Play sert la DERNIÈRE release de CETTE piste — pas automatiquement le fichier d’une autre piste. Vérifie code version dans Play = même build qu’EAS.",
   "cli": {
     "version": ">= 10.0.0",
     "appVersionSource": "remote"
@@ -23,7 +24,8 @@
       "autoIncrement": true,
       "node": "20.18.0",
       "env": {
-        "NPM_CONFIG_LEGACY_PEER_DEPS": "true"
+        "NPM_CONFIG_LEGACY_PEER_DEPS": "true",
+        "NODE_ENV": "production"
       },
       "android": {
         "buildType": "app-bundle"

@@ -15,7 +15,7 @@ import {
   Modal
 } from 'react-native';
 import { useRouter, usePathname } from 'expo-router';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { BlurView } from 'expo-blur';
 import { Image as ExpoImage } from 'expo-image';
@@ -159,6 +159,7 @@ const carImage = require('@/assets/images/voiture.png');
 
 export default function ClientHomeScreen() {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const { client } = useAuth();
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [scrollProgress, setScrollProgress] = useState(0);
@@ -649,6 +650,12 @@ export default function ClientHomeScreen() {
           <MapView
             ref={mapRef}
             style={styles.map}
+            mapPadding={{
+              top: 0,
+              right: 0,
+              bottom: Math.round(100 + insets.bottom),
+              left: 0,
+            }}
             initialRegion={userLocation ? {
               ...userLocation,
               latitudeDelta: 0.01,
@@ -691,36 +698,57 @@ export default function ClientHomeScreen() {
             {/* Voitures autour de Papeete - rendues en premier (en dessous) */}
             {Marker && carPositions.map((car) => (
               // @ts-ignore
-              <Marker
-                key={car.id}
-                coordinate={{ latitude: car.latitude, longitude: car.longitude }}
-                anchor={{ x: 0.5, y: 0.5 }}
-                zIndex={1}
-              >
-                <Image
-                  source={carImage}
-                  style={[styles.carMarkerImage, { transform: [{ rotate: `${car.rotation}deg` }] }]}
-                  resizeMode="contain"
+              Platform.OS === 'android' ? (
+                <Marker
+                  key={car.id}
+                  coordinate={{ latitude: car.latitude, longitude: car.longitude }}
+                  anchor={{ x: 0.5, y: 0.5 }}
+                  zIndex={1}
+                  image={require('@/assets/images/voiture-marker.png')}
+                  rotation={car.rotation}
+                  flat
                 />
-              </Marker>
+              ) : (
+                <Marker
+                  key={car.id}
+                  coordinate={{ latitude: car.latitude, longitude: car.longitude }}
+                  anchor={{ x: 0.5, y: 0.5 }}
+                  zIndex={1}
+                >
+                  <Image
+                    source={carImage}
+                    style={[styles.carMarkerImage, { transform: [{ rotate: `${car.rotation}deg` }] }]}
+                    resizeMode="contain"
+                  />
+                </Marker>
+              )
             ))}
             
             {/* Position utilisateur - rendue en dernier (au-dessus, priorité) */}
             {userLocation && Marker && (
               <>
                 {/* @ts-ignore */}
-                <Marker
-                  coordinate={userLocation}
-                  anchor={{ x: 0.5, y: 1 }}
-                  centerOffset={{ x: 0, y: -10 }}
-                  zIndex={999}
-                >
-                  <ExpoImage
-                    source={require('@/assets/images/Iconeacpp(1).gif')}
-                    style={styles.userMarkerImage}
-                    contentFit="contain"
+                {Platform.OS === 'android' ? (
+                  <Marker
+                    coordinate={userLocation}
+                    anchor={{ x: 0.5, y: 1 }}
+                    zIndex={999}
+                    image={require('@/assets/images/Icone-position-client-marker.png')}
                   />
-                </Marker>
+                ) : (
+                  <Marker
+                    coordinate={userLocation}
+                    anchor={{ x: 0.5, y: 1 }}
+                    centerOffset={{ x: 0, y: -10 }}
+                    zIndex={999}
+                  >
+                    <ExpoImage
+                      source={require('@/assets/images/Iconeacpp(1).gif')}
+                      style={styles.userMarkerImage}
+                      contentFit="contain"
+                    />
+                  </Marker>
+                )}
               </>
             )}
           </MapView>
@@ -1026,7 +1054,7 @@ export default function ClientHomeScreen() {
       )}
 
       {/* Image Carousel with Liquid Glass Effect */}
-      <View style={styles.carouselContainer}>
+      <View style={[styles.carouselContainer, { bottom: 115 + insets.bottom }]}>
         <ScrollView
           ref={carouselScrollRef}
           horizontal
@@ -1085,7 +1113,7 @@ export default function ClientHomeScreen() {
 
       {/* Bottom Panel */}
       <View style={styles.bottomPanel}>
-        <View style={styles.bottomPanelContent}>
+        <View style={[styles.bottomPanelContent, { paddingBottom: 28 + insets.bottom }]}>
           <View style={styles.searchRow}>
             <TouchableOpacity 
               style={styles.searchInputContainer}
