@@ -1,18 +1,28 @@
-// Même clé que dans android/app/src/main/AndroidManifest.xml (meta-data com.google.android.geo.API_KEY).
-// Les var d'env EAS priment ; le repli évite extra.googleMapsApiKey vide → pas de Directions/geocode en prod.
-const GOOGLE_MAPS_API_KEY_RESOLVED =
-  process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY ||
-  process.env.GOOGLE_MAPS_API_KEY ||
-  "AIzaSyDQ_28lDOBlz9rxYoAX6djaniQ-q9hQHkI";
+// Une seule clé : la même que android/app/src/main/AndroidManifest.xml (com.google.android.geo.API_KEY).
+// Ne pas utiliser une autre valeur dans .env / EAS : le SDK natif lit le manifest, le JS lit extra → deux clés = carte ou tracés cassés.
+const GOOGLE_MAPS_API_KEY_CANONICAL = "AIzaSyDQ_28lDOBlz9rxYoAX6djaniQ-q9hQHkI";
+
+const mapsKeyFromEnv =
+  process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY || process.env.GOOGLE_MAPS_API_KEY || "";
+
+if (mapsKeyFromEnv && mapsKeyFromEnv !== GOOGLE_MAPS_API_KEY_CANONICAL) {
+  console.warn(
+    "[app.config] EXPO_PUBLIC_GOOGLE_MAPS_API_KEY (ou GOOGLE_MAPS_API_KEY) est différente du manifest Android. On force la clé CANONICAL pour aligner SDK Maps et appels Directions/Geocode. Retire ou aligne la variable d’env."
+  );
+}
+
+const GOOGLE_MAPS_API_KEY_RESOLVED = GOOGLE_MAPS_API_KEY_CANONICAL;
 
 // Debug: Log des variables d'environnement au build time
-console.log('=== APP.CONFIG.JS DEBUG (BUILD TIME) ===');
-console.log('EXPO_PUBLIC_API_URL:', process.env.EXPO_PUBLIC_API_URL || 'NOT SET');
-console.log('EXPO_PUBLIC_GOOGLE_MAPS_API_KEY:', process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY ? `PRESENT (length: ${process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY.length})` : 'MISSING');
-console.log('GOOGLE_MAPS_API_KEY:', process.env.GOOGLE_MAPS_API_KEY ? `PRESENT (length: ${process.env.GOOGLE_MAPS_API_KEY.length})` : 'MISSING');
-console.log('NODE_ENV:', process.env.NODE_ENV || 'NOT SET');
-console.log('googleMapsApiKey resolved length:', GOOGLE_MAPS_API_KEY_RESOLVED.length);
-console.log('========================================');
+console.log("=== APP.CONFIG.JS DEBUG (BUILD TIME) ===");
+console.log("EXPO_PUBLIC_API_URL:", process.env.EXPO_PUBLIC_API_URL || "NOT SET");
+console.log(
+  "EXPO_PUBLIC_GOOGLE_MAPS_API_KEY:",
+  process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY ? `PRESENT (ignored if ≠ canonical)` : "MISSING"
+);
+console.log("NODE_ENV:", process.env.NODE_ENV || "NOT SET");
+console.log("googleMapsApiKey (canonical) length:", GOOGLE_MAPS_API_KEY_RESOLVED.length);
+console.log("========================================");
 
 export default {
   expo: {
