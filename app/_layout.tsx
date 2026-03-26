@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { QueryClientProvider } from '@tanstack/react-query';
@@ -160,15 +160,24 @@ const SPLASH_VIDEO = require('@/assets/images/splash-opening.mp4');
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
 // Écran de chargement personnalisé avec vidéo splash
-function LoadingScreen({ progress, loadedCount, totalCount, videoUri }: { progress: number; loadedCount: number; totalCount: number; videoUri: string | null }) {
+function LoadingScreen({ progress, loadedCount, totalCount, videoUri, onVideoReady }: { progress: number; loadedCount: number; totalCount: number; videoUri: string | null; onVideoReady?: () => void }) {
+  const [videoError, setVideoError] = useState(false);
   const videoSource = videoUri ? { uri: videoUri } : SPLASH_VIDEO;
-  
+  const androidReleaseNoVideo = Platform.OS === 'android' && !__DEV__;
+  const useVideoFallback = Platform.OS === 'web' || videoError || androidReleaseNoVideo;
+
+  useEffect(() => {
+    if (androidReleaseNoVideo || Platform.OS === 'web') {
+      onVideoReady?.();
+    }
+  }, [androidReleaseNoVideo, onVideoReady]);
+
   return (
     <View style={styles.loadingContainer}>
       <StatusBar style="light" />
       
-      {/* Vidéo splash en plein écran */}
-      {Platform.OS !== 'web' ? (
+      {/* Vidéo splash en plein écran — fallback image si decode natif plante (souvent en release Android) */}
+      {!useVideoFallback ? (
         <Video
           source={videoSource}
           style={styles.splashVideo}
@@ -178,6 +187,12 @@ function LoadingScreen({ progress, loadedCount, totalCount, videoUri }: { progre
           isMuted
           useNativeControls={false}
           usePoster={false}
+          onReadyForDisplay={() => onVideoReady?.()}
+          onError={(e) => {
+            console.warn('[Splash] Video error, fallback logo:', e);
+            setVideoError(true);
+            onVideoReady?.();
+          }}
         />
       ) : (
         <Image
@@ -262,22 +277,36 @@ export default function RootLayout() {
     }
   }
 
+  const videoReadyRef = useRef<() => void>();
+  const [nativeSplashHidden, setNativeSplashHidden] = useState(false);
+
+  const handleVideoReady = useCallback(() => {
+    if (!nativeSplashHidden) {
+      SplashScreen.hideAsync();
+      setNativeSplashHidden(true);
+    }
+    videoReadyRef.current?.();
+  }, [nativeSplashHidden]);
+
   // Précharger TOUTES les images AVANT d'afficher l'app
   useEffect(() => {
     async function prepareApp() {
       try {
         console.log('[Preload] Début du préchargement complet...');
         
-        // Précharger la vidéo splash et obtenir l'URI locale
-        const uri = await preloadSplashVideo();
-        setVideoUri(uri);
+        if (Platform.OS === 'android' && !__DEV__) {
+          setVideoUri(null);
+        } else {
+          const uri = await preloadSplashVideo();
+          setVideoUri(uri);
+        }
         
-        // Laisser React re-render avec la vidéo avant de cacher le splash
-        await new Promise(resolve => setTimeout(resolve, 50));
-        
-        // Cacher le splash natif quand la vidéo est prête
-        await SplashScreen.hideAsync();
-        
+        // Attendre que la vidéo soit prête OU timeout de 3s (fallback)
+        await new Promise<void>(resolve => {
+          videoReadyRef.current = resolve;
+          setTimeout(() => resolve(), 3000);
+        });
+
         // Précharger toutes les images avec progression réelle
         await preloadAllImages((loaded, total) => {
           setLoadedCount(loaded);
@@ -323,7 +352,7 @@ export default function RootLayout() {
   }, [appIsReady]);
 
   if (!fontsLoaded || !appIsReady) {
-    return <LoadingScreen progress={loadingProgress} loadedCount={loadedCount} totalCount={totalCount} videoUri={videoUri} />;
+    return <LoadingScreen progress={loadingProgress} loadedCount={loadedCount} totalCount={totalCount} videoUri={videoUri} onVideoReady={handleVideoReady} />;
   }
 
   return (

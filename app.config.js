@@ -33,7 +33,7 @@ export default {
     icon: "./assets/images/logoappclienttapea.png",
     scheme: "tapea",
     userInterfaceStyle: "automatic",
-    newArchEnabled: true,
+    newArchEnabled: false,
     ios: {
       supportsTablet: false,
       bundleIdentifier: "com.tapea.customer",
