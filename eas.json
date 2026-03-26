@@ -1,5 +1,4 @@
 {
-  "_comment_play_test": "Même .aab: uploade-le sur la PISTE où tu testes (interne / fermée / prod). Le lien test Play sert la DERNIÈRE release de CETTE piste — pas automatiquement le fichier d’une autre piste. Vérifie code version dans Play = même build qu’EAS.",
   "cli": {
     "version": ">= 10.0.0",
     "appVersionSource": "remote"
